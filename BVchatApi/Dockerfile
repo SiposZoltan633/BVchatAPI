@@ -1,20 +1,16 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:8.0
-AS base
+﻿FROM mcr.microsoft.com/dotnet/sdk:8.0 AS
+base
 WORKDIR /app
-EXPOSE 80
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS
-build
-WORKDIR /rc
+COPY *.csproj
+RUN dotnet restore
 
-COPY . .
+COPY . ./
+RUN dotnet publish -c Release -o out
 
-RUN dotnet restore ./BVchatAPI.csproj
-RUN dotnet publish ./BVchatAPI.csproj -c
-Release -o /app/publish
-
-FROM base AS final
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+AS runtime
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build /app/out .
 
 ENTRYPOINT ["dotnet", "BVchatAPI.ddl"]
