@@ -1,15 +1,15 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BVchatApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class FelhasznaloController : ControllerBase
+    public class UserController : ControllerBase
     {
         private readonly IConfiguration _config;
 
-        public FelhasznaloController(IConfiguration config)
+        public UserController(IConfiguration config)
         {
             _config = config;
         }
@@ -21,20 +21,20 @@ namespace BVchatApi.Controllers
             try
             {
                 var felhasznalok = new List<object>();
-                using var conn = new MySqlConnection(connStr);
+                using var conn = new NpgsqlConnection(connStr);
                 conn.Open();
 
-                string sql = "SELECT felhasznaloId, felhasznaloNev, regisztracioIdopont FROM felhasznalok";
-                using var cmd = new MySqlCommand(sql, conn);
+                string sql = "SELECT \"felhasznaloId\", \"felhasznaloNev\", \"regisztracioIdopont\" FROM felhasznalok";
+                using var cmd = new NpgsqlCommand(sql, conn);
                 using var reader = cmd.ExecuteReader();
 
                 while (reader.Read())
                 {
                     felhasznalok.Add(new
                     {
-                        Id = reader.GetInt32("felhasznaloId"),
-                        Nev = reader.GetString("felhasznaloNev"),
-                        Regisztracio = reader.GetDateTime("regisztracioIdopont")
+                        Id = reader.GetInt32(0),
+                        Nev = reader.GetString(1),
+                        Regisztracio = reader.GetDateTime(2)
                     });
                 }
 
@@ -45,29 +45,27 @@ namespace BVchatApi.Controllers
                 return StatusCode(500, new { uzenet = "Szerverhiba", hiba = ex.Message });
             }
         }
+
         [HttpPost("uj")]
         public IActionResult UjFelhasznalo([FromBody] FelhasznaloDto uj)
         {
             var connStr = _config.GetConnectionString("Default");
             try
             {
-                using var conn = new MySqlConnection(connStr);
+                using var conn = new NpgsqlConnection(connStr);
                 conn.Open();
 
-                // ⛔️ Felhasználónév foglaltság ellenőrzése
-                var checkCmd = new MySqlCommand("SELECT COUNT(*) FROM felhasznalok WHERE felhasznaloNev = @nev", conn);
+                var checkCmd = new NpgsqlCommand("SELECT COUNT(*) FROM felhasznalok WHERE \"felhasznaloNev\" = @nev", conn);
                 checkCmd.Parameters.AddWithValue("@nev", uj.FelhasznaloNev);
                 long count = (long)checkCmd.ExecuteScalar();
 
                 if (count > 0)
                     return BadRequest(new { uzenet = "Ez a felhasználónév már foglalt" });
 
-                // 🔐 Jelszó hash-elése
                 var jelszoHash = BCrypt.Net.BCrypt.HashPassword(uj.Jelszo);
 
-                // Adat beszúrása
-                string sql = "INSERT INTO felhasznalok (felhasznaloNev, jelszo, regisztracioIdopont) VALUES (@nev, @jelszo, @ido)";
-                using var cmd = new MySqlCommand(sql, conn);
+                string sql = "INSERT INTO felhasznalok (\"felhasznaloNev\", \"jelszo\", \"regisztracioIdopont\") VALUES (@nev, @jelszo, @ido)";
+                using var cmd = new NpgsqlCommand(sql, conn);
                 cmd.Parameters.AddWithValue("@nev", uj.FelhasznaloNev);
                 cmd.Parameters.AddWithValue("@jelszo", jelszoHash);
                 cmd.Parameters.AddWithValue("@ido", DateTime.Now);
@@ -81,26 +79,26 @@ namespace BVchatApi.Controllers
                 return StatusCode(500, new { uzenet = "Szerverhiba", hiba = ex.Message });
             }
         }
+
         [HttpPost("bejelentkezes")]
         public IActionResult Bejelentkezes([FromBody] FelhasznaloDto login)
         {
             var connStr = _config.GetConnectionString("Default");
             try
             {
-                using var conn = new MySqlConnection(connStr);
+                using var conn = new NpgsqlConnection(connStr);
                 conn.Open();
 
-                string sql = "SELECT jelszo FROM felhasznalok WHERE felhasznaloNev = @nev";
-                using var cmd = new MySqlCommand(sql, conn);
+                string sql = "SELECT \"jelszo\" FROM felhasznalok WHERE \"felhasznaloNev\" = @nev";
+                using var cmd = new NpgsqlCommand(sql, conn);
                 cmd.Parameters.AddWithValue("@nev", login.FelhasznaloNev);
                 var reader = cmd.ExecuteReader();
 
                 if (!reader.Read())
                     return Unauthorized("Hibás felhasználónév vagy jelszó");
 
-                string hash = reader.GetString("jelszo");
+                string hash = reader.GetString(0);
 
-                // 🔐 Itt használd a Verify-t!
                 if (!BCrypt.Net.BCrypt.Verify(login.Jelszo, hash))
                     return Unauthorized("Hibás felhasználónév vagy jelszó");
 
@@ -116,6 +114,6 @@ namespace BVchatApi.Controllers
         {
             public required string FelhasznaloNev { get; set; }
             public required string Jelszo { get; set; }
-        }    
+        }
     }
 }
