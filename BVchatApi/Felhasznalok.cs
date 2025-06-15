@@ -3,19 +3,23 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BVchatApi.Models
 {
-    [Table("felhasznalok")] // Adatbázistábla neve
+    [Table("felhasznalok")]
     public class Felhasznalo
     {
         [Key]
         [Column("felhasznaloid")]
-        public int FelhasznaloId { get; set; }
+        public int felhasznaloid { get; set; }
 
         [Required]
         [Column("felhasznalonev")]
-        public string FelhasznaloNev { get; set; } = string.Empty;
+        public string felhasznalonev { get; set; } = string.Empty;
 
         [Required]
         [Column("jelszo")]
-        public string Jelszo { get; set; } = string.Empty;
+        public string jelszo { get; set; } = string.Empty;
+
+        [Required]
+        [Column("regisztracioidopont")]
+        public DateTime regisztracioidopont { get; set; } // ÚJ
     }
 }
