@@ -26,23 +26,16 @@ namespace BVchatApi.Controllers
 
                 string sql = "SELECT \"felhasznaloid\", TRIM(\"felhasznalonev\"), \"regisztracioidopont\" FROM felhasznalok";
                 using var cmd = new NpgsqlCommand(sql, conn);
+                using var reader = cmd.ExecuteReader();
 
-                try
+                while (reader.Read())
                 {
-                    using var reader = cmd.ExecuteReader();
-                    while (reader.Read())
+                    felhasznalok.Add(new
                     {
-                        felhasznalok.Add(new
-                        {
-                            Id = reader.GetInt32(0),
-                            Nev = reader.GetString(1),
-                            Regisztracio = reader.GetDateTime(2)
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    return StatusCode(500, new { uzenet = "Olvasási hiba", hiba = ex.Message });
+                        Id = reader.GetInt32(0),
+                        Nev = reader.GetString(1),
+                        Regisztracio = reader.GetDateTime(2)
+                    });
                 }
 
                 return Ok(felhasznalok);
@@ -56,26 +49,30 @@ namespace BVchatApi.Controllers
         [HttpPost("uj")]
         public IActionResult UjFelhasznalo([FromBody] FelhasznaloDto uj)
         {
+            if (string.IsNullOrWhiteSpace(uj?.felhasznalonev) || string.IsNullOrWhiteSpace(uj?.jelszo))
+                return BadRequest(new { uzenet = "Hiányzó felhasználónév vagy jelszó" });
+
             var connStr = _config.GetConnectionString("Default");
             try
             {
                 using var conn = new NpgsqlConnection(connStr);
                 conn.Open();
 
-                var checkCmd = new NpgsqlCommand("SELECT COUNT(*) FROM felhasznalok WHERE TRIM(\"felhasznalonev\") = @nev", conn);
-                checkCmd.Parameters.AddWithValue("@nev", uj.felhasznalonev);
-                long count = Convert.ToInt64(checkCmd.ExecuteScalar() ?? 0);
+                var felhasznalonev = uj.felhasznalonev.Trim();
+
+                using var checkCmd = new NpgsqlCommand("SELECT COUNT(*) FROM felhasznalok WHERE TRIM(\"felhasznalonev\") = @nev", conn);
+                checkCmd.Parameters.AddWithValue("@nev", felhasznalonev);
+                var count = Convert.ToInt64(checkCmd.ExecuteScalar() ?? 0);
 
                 if (count > 0)
                     return BadRequest(new { uzenet = "Ez a felhasználónév már foglalt" });
 
                 var jelszoHash = BCrypt.Net.BCrypt.HashPassword(uj.jelszo);
 
-                string sql = "INSERT INTO felhasznalok (\"felhasznalonev\", \"jelszo\", \"regisztracioidopont\") VALUES (@nev, @jelszo, @ido)";
-                using var cmd = new NpgsqlCommand(sql, conn);
-                cmd.Parameters.AddWithValue("@nev", uj.felhasznalonev);
+                using var cmd = new NpgsqlCommand("INSERT INTO felhasznalok (\"felhasznalonev\", \"jelszo\", \"regisztracioidopont\") VALUES (@nev, @jelszo, @ido)", conn);
+                cmd.Parameters.AddWithValue("@nev", felhasznalonev);
                 cmd.Parameters.AddWithValue("@jelszo", jelszoHash);
-                cmd.Parameters.AddWithValue("@ido", DateTime.Now);
+                cmd.Parameters.AddWithValue("@ido", DateTime.UtcNow);
 
                 cmd.ExecuteNonQuery();
 
@@ -90,24 +87,28 @@ namespace BVchatApi.Controllers
         [HttpPost("bejelentkezes")]
         public IActionResult Bejelentkezes([FromBody] FelhasznaloDto login)
         {
+            if (string.IsNullOrWhiteSpace(login?.felhasznalonev) || string.IsNullOrWhiteSpace(login?.jelszo))
+                return BadRequest(new { uzenet = "Hiányzó felhasználónév vagy jelszó" });
+
             var connStr = _config.GetConnectionString("Default");
             try
             {
                 using var conn = new NpgsqlConnection(connStr);
                 conn.Open();
 
-                string sql = "SELECT \"jelszo\" FROM felhasznalok WHERE TRIM(\"felhasznalonev\") = @nev";
-                using var cmd = new NpgsqlCommand(sql, conn);
-                cmd.Parameters.AddWithValue("@nev", login.felhasznalonev);
-                var reader = cmd.ExecuteReader();
+                var felhasznalonev = login.felhasznalonev.Trim();
 
+                using var cmd = new NpgsqlCommand("SELECT \"jelszo\" FROM felhasznalok WHERE TRIM(\"felhasznalonev\") = @nev", conn);
+                cmd.Parameters.AddWithValue("@nev", felhasznalonev);
+
+                using var reader = cmd.ExecuteReader();
                 if (!reader.Read())
-                    return Unauthorized("Hibás felhasználónév vagy jelszó");
+                    return Unauthorized(new { uzenet = "Hibás felhasználónév vagy jelszó" });
 
-                string hash = reader.GetString(0);
+                var hash = reader.GetString(0);
 
                 if (!BCrypt.Net.BCrypt.Verify(login.jelszo, hash))
-                    return Unauthorized("Hibás felhasználónév vagy jelszó");
+                    return Unauthorized(new { uzenet = "Hibás felhasználónév vagy jelszó" });
 
                 return Ok(new { uzenet = "Sikeres bejelentkezés" });
             }
@@ -119,8 +120,8 @@ namespace BVchatApi.Controllers
 
         public class FelhasznaloDto
         {
-            public required string felhasznalonev { get; set; }
-            public required string jelszo { get; set; }
+            public string felhasznalonev { get; set; } = string.Empty;
+            public string jelszo { get; set; } = string.Empty;
         }
     }
 }

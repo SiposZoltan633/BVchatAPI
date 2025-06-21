@@ -3,12 +3,14 @@ using BVchatApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
-
 // PostgreSQL kapcsolat
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
+// MVC + API controller támogatás
+builder.Services.AddControllers();
+
+// CORS engedélyezése minden irányból – ha mobilról vagy frontendről hívod
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -19,11 +21,13 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Swagger dokumentáció
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// CORS middleware
 app.UseCors();
 
 if (app.Environment.IsDevelopment())
@@ -33,7 +37,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();
