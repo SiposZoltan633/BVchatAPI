@@ -1,5 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using BVchatApi.Models;
+using BVchatApi;
 
 namespace BVchatApi.Data
 {
